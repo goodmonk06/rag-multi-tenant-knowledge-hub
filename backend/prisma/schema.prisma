@@ -12,13 +12,62 @@ datasource db {
   extensions = [vector]
 }
 
+// ============================================================================
+// USERS & ACCESS CONTROL
+// ============================================================================
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  name         String
+  passwordHash String?
+  role         UserRole       @default(USER)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  tenantMembers TenantMember[]
+  savedQueries SavedQuery[]
+
+  @@map("users")
+}
+
+model TenantMember {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId  String
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role      TenantMemberRole @default(MEMBER)
+  invitedAt DateTime         @default(now())
+  joinedAt  DateTime?
+  invitedBy String?
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_members")
+}
+
+// ============================================================================
+// TENANTS & KNOWLEDGE BASES
+// ============================================================================
+
 model Tenant {
-  id             String          @id @default(cuid())
-  name           String
-  apiKey         String          @unique @default(cuid())
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  knowledgeBases KnowledgeBase[]
+  id              String          @id @default(cuid())
+  name            String
+  slug            String?         @unique
+  apiKey          String          @unique @default(cuid())
+  plan            TenantPlan      @default(FREE)
+  status          TenantStatus    @default(ACTIVE)
+  quotas          Json?           // { maxKBs, maxDocs, maxQueries, etc. }
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  knowledgeBases  KnowledgeBase[]
+  members         TenantMember[]
+  collections     Collection[]
+  apiUsageLogs    APIUsageLog[]
+  webhookConfigs  WebhookConfig[]
 
   @@map("tenants")
 }
@@ -29,15 +78,65 @@ model KnowledgeBase {
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name        String
   description String?
+  slug        String?
+  tags        String[]    @default([])
+  visibility  KBVisibility @default(PRIVATE)
+  settings    Json?       // { embeddingModel, chunkSize, etc. }
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+
   documents   Document[]
   chunks      Chunk[]
   queryLogs   QueryLog[]
+  savedQueries SavedQuery[]
+  collectionKBs CollectionKnowledgeBase[]
 
   @@index([tenantId])
+  @@index([tenantId, slug])
+  @@index([tags])
   @@map("knowledge_bases")
 }
+
+// ============================================================================
+// COLLECTIONS & ORGANIZATION
+// ============================================================================
+
+model Collection {
+  id          String      @id @default(cuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  slug        String?
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  knowledgeBases CollectionKnowledgeBase[]
+
+  @@index([tenantId])
+  @@index([tenantId, slug])
+  @@map("collections")
+}
+
+model CollectionKnowledgeBase {
+  id              String        @id @default(cuid())
+  collectionId    String
+  collection      Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  knowledgeBaseId String
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  addedAt         DateTime      @default(now())
+  addedBy         String?
+
+  @@unique([collectionId, knowledgeBaseId])
+  @@index([collectionId])
+  @@index([knowledgeBaseId])
+  @@map("collection_knowledge_bases")
+}
+
+// ============================================================================
+// DOCUMENTS & CHUNKS
+// ============================================================================
 
 model Document {
   id             String        @id @default(cuid())
@@ -45,10 +144,17 @@ model Document {
   knowledgeBase  KnowledgeBase @relation(fields: [kbId], references: [id], onDelete: Cascade)
   sourceType     SourceType
   sourceMetaJson Json?
+  status         DocumentStatus @default(READY)
+  title          String?
+  language       String?       @default("en")
   createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  createdBy      String?
+
   chunks         Chunk[]
 
   @@index([kbId])
+  @@index([status])
   @@map("documents")
 }
 
@@ -61,6 +167,9 @@ model Chunk {
   content        String                       @db.Text
   embedding      Unsupported("vector(1536)")?
   metadataJson   Json?
+  position       Int?                         // Position/order within document
+  score          Float?                       // Quality score
+  language       String?                      @default("en")
   createdAt      DateTime                     @default(now())
 
   @@index([documentId])
@@ -68,20 +177,154 @@ model Chunk {
   @@map("chunks")
 }
 
+// ============================================================================
+// QUERIES & ANALYTICS
+// ============================================================================
+
 model QueryLog {
   id            String        @id @default(cuid())
   kbId          String
   knowledgeBase KnowledgeBase @relation(fields: [kbId], references: [id], onDelete: Cascade)
   queryText     String        @db.Text
   resultsJson   Json
+  userId        String?
+  responseTime  Int?          // milliseconds
+  resultCount   Int?
   createdAt     DateTime      @default(now())
 
   @@index([kbId])
+  @@index([createdAt])
   @@map("query_logs")
+}
+
+model SavedQuery {
+  id              String        @id @default(cuid())
+  kbId            String
+  knowledgeBase   KnowledgeBase @relation(fields: [kbId], references: [id], onDelete: Cascade)
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name            String
+  description     String?
+  queryText       String        @db.Text
+  filters         Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([kbId])
+  @@index([userId])
+  @@map("saved_queries")
+}
+
+model APIUsageLog {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  endpoint     String
+  method       String
+  statusCode   Int
+  responseTime Int      // milliseconds
+  userId       String?
+  ipAddress    String?
+  userAgent    String?
+  errorMessage String?
+  metadata     Json?
+  timestamp    DateTime @default(now())
+
+  @@index([tenantId, timestamp])
+  @@index([endpoint])
+  @@map("api_usage_logs")
+}
+
+// ============================================================================
+// WEBHOOKS & EVENTS
+// ============================================================================
+
+model WebhookConfig {
+  id          String       @id @default(cuid())
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  url         String
+  events      String[]     // Array of event types to subscribe to
+  secret      String?      // For signature verification
+  enabled     Boolean      @default(true)
+  headers     Json?        // Custom headers
+  retryPolicy Json?        // Retry configuration
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  lastFiredAt DateTime?
+
+  deliveryLogs WebhookDeliveryLog[]
+
+  @@index([tenantId])
+  @@index([enabled])
+  @@map("webhook_configs")
+}
+
+model WebhookDeliveryLog {
+  id              String        @id @default(cuid())
+  webhookConfigId String
+  webhookConfig   WebhookConfig @relation(fields: [webhookConfigId], references: [id], onDelete: Cascade)
+  event           String
+  payload         Json
+  statusCode      Int?
+  responseBody    String?
+  attemptCount    Int           @default(1)
+  success         Boolean       @default(false)
+  errorMessage    String?
+  deliveredAt     DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([webhookConfigId])
+  @@index([createdAt])
+  @@index([success])
+  @@map("webhook_delivery_logs")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum TenantMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum TenantPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum KBVisibility {
+  PRIVATE
+  SHARED
+  PUBLIC
 }
 
 enum SourceType {
   file
   url
   text
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
 }
