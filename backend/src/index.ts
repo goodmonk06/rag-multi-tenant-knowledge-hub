@@ -6,10 +6,14 @@ import { tenantRoutes } from './routes/tenants';
 import { knowledgeBaseRoutes } from './routes/knowledge-bases';
 import { ingestionRoutes } from './routes/ingestion';
 import { queryRoutes } from './routes/query';
+import { errorHandler } from './middleware/error-handler';
 
 const server = Fastify({
   logger: true,
 });
+
+// Register error handler
+server.setErrorHandler(errorHandler);
 
 async function start() {
   try {

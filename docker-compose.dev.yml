@@ -1,0 +1,23 @@
+version: '3.8'
+
+# Development-only docker-compose for local database
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: rag-postgres-dev
+    environment:
+      POSTGRES_USER: rag_user
+      POSTGRES_PASSWORD: rag_password
+      POSTGRES_DB: rag_knowledge_hub
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag_user -d rag_knowledge_hub"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:

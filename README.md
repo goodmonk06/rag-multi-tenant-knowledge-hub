@@ -1,138 +1,220 @@
 # RAG Multi-Tenant Knowledge Hub
 
-A production-ready, multi-tenant RAG (Retrieval-Augmented Generation) knowledge base system with document ingestion, vector search, and a modern web dashboard.
+A production-ready, multi-tenant RAG (Retrieval-Augmented Generation) knowledge base system with document ingestion, vector search, and a modern web dashboard. Built with TypeScript, Fastify, Next.js, and PostgreSQL with pgvector.
+
+## Overview
+
+This project provides a complete, scalable solution for building RAG-powered applications. It supports multiple tenants, each with isolated knowledge bases, and offers semantic search using vector embeddings. Perfect for documentation systems, customer support, or as a backend for AI-powered applications.
+
+**Key Capabilities:**
+- Multi-tenant architecture with complete data isolation
+- Document ingestion from text, URLs, and files (file support planned)
+- Automatic text chunking and embedding generation
+- Semantic vector search with configurable similarity ranking
+- Interactive query playground in web UI
+- RESTful API for easy integration
+- Full test coverage with Vitest
+- Docker support for local development and production deployment
 
 ## Features
 
 - **Multi-Tenant Architecture**: Isolate knowledge bases by tenant with API key authentication
-- **Document Ingestion**: Ingest content from text, URLs, and files (file support coming soon)
-- **Vector Search**: Semantic search powered by pgvector and OpenAI embeddings
-- **Modern Stack**: Fastify backend, Next.js frontend, Prisma ORM, PostgreSQL with pgvector
-- **Query Playground**: Interactive UI for testing queries and viewing results
-- **API-First Design**: RESTful API for easy integration with other applications
+- **Document Ingestion**: Ingest content from text, URLs, and file uploads
+- **Vector Search**: Semantic search powered by pgvector and OpenAI embeddings (text-embedding-3-small)
+- **Modern Stack**: Fastify backend, Next.js 15 frontend, Prisma ORM, PostgreSQL with pgvector
+- **Query Playground**: Interactive UI for testing queries and viewing similarity scores
+- **API-First Design**: RESTful API for integration with external applications
+- **Comprehensive Testing**: Unit and integration tests with Vitest
+- **Production Ready**: Docker support, error handling, logging, and monitoring hooks
 
-## Architecture
+## Tech Stack
 
-### Tech Stack
-
-**Backend:**
+### Backend
 - [Fastify](https://www.fastify.io/) - Fast and low overhead web framework
 - [Prisma](https://www.prisma.io/) - Type-safe ORM with PostgreSQL
 - [pgvector](https://github.com/pgvector/pgvector) - Vector similarity search in PostgreSQL
-- [OpenAI Embeddings API](https://platform.openai.com/docs/guides/embeddings) - text-embedding-3-small model
+- [OpenAI Embeddings API](https://platform.openai.com/docs/guides/embeddings) - text-embedding-3-small (1536 dimensions)
+- [Zod](https://zod.dev/) - Schema validation
+- [Vitest](https://vitest.dev/) - Unit testing framework
 - TypeScript for type safety
 
-**Frontend:**
+### Frontend
 - [Next.js 15](https://nextjs.org/) - React framework with App Router
 - [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework
 - TypeScript
 
-**Database:**
-- PostgreSQL with pgvector extension
-- Docker Compose for local development
+### Database & Infrastructure
+- PostgreSQL 16 with pgvector extension
+- Docker & Docker Compose for containerization
+- ESLint & Prettier for code quality
 
-### Schema
+## Domain Model
 
-```prisma
-Tenant
-  - id, name, apiKey, createdAt, updatedAt
-  - knowledgeBases: KnowledgeBase[]
-
-KnowledgeBase
-  - id, tenantId, name, description, createdAt, updatedAt
-  - documents: Document[]
-  - chunks: Chunk[]
-  - queryLogs: QueryLog[]
-
-Document
-  - id, kbId, sourceType (file|url|text), sourceMetaJson, createdAt
-  - chunks: Chunk[]
-
-Chunk
-  - id, documentId, kbId, content, embedding (vector[1536]), metadataJson, createdAt
-
-QueryLog
-  - id, kbId, queryText, resultsJson, createdAt
+```
+Tenant (1 → N)
+  ├─ id, name, apiKey, timestamps
+  └─ KnowledgeBase[] (1 → N)
+       ├─ id, name, description, timestamps
+       ├─ Document[] (1 → N)
+       │    ├─ id, sourceType (text|url|file), sourceMetaJson
+       │    └─ Chunk[] (1 → N)
+       │         └─ id, content, embedding (vector[1536]), metadataJson
+       ├─ Chunk[] (all chunks across documents)
+       └─ QueryLog[] (search history)
 ```
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ and npm 9+
-- Docker and Docker Compose (for local PostgreSQL)
-- OpenAI API key
+- **Node.js** 18+ and npm 9+
+- **Docker & Docker Compose** (recommended for easiest setup)
+- **OpenAI API key** ([Get one here](https://platform.openai.com/api-keys))
 
-### Installation
+### Quick Start (Recommended)
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd rag-multi-tenant-knowledge-hub
-   ```
+The fastest way to get started is using our one-command setup:
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+```bash
+# 1. Clone the repository
+git clone <repository-url>
+cd rag-multi-tenant-knowledge-hub
 
-3. **Set up environment variables:**
+# 2. Copy environment files
+cp backend/.env.example backend/.env
+# Edit backend/.env and add your OPENAI_API_KEY
 
-   **Backend (`backend/.env`):**
-   ```bash
-   cp backend/.env.example backend/.env
-   ```
+# 3. Run setup (installs deps, starts DB, runs migrations)
+npm run setup
 
-   Edit `backend/.env`:
-   ```env
-   DATABASE_URL="postgresql://rag_user:rag_password@localhost:5432/rag_knowledge_hub?schema=public"
-   PORT=3001
-   HOST=0.0.0.0
-   OPENAI_API_KEY=sk-your-openai-api-key-here
-   DEFAULT_TOP_K=5
-   CHUNK_SIZE=500
-   CHUNK_OVERLAP=50
-   ```
+# 4. Seed the database with demo data
+npm run db:seed
 
-   **Frontend (`frontend/.env.local`):**
-   ```bash
-   cp frontend/.env.example frontend/.env.local
-   ```
+# 5. Start development servers
+npm run dev
+```
 
-   Edit `frontend/.env.local`:
-   ```env
-   NEXT_PUBLIC_API_URL=http://localhost:3001/api
-   ```
+Visit:
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:3001
+- **API Health**: http://localhost:3001/health
 
-4. **Start PostgreSQL with Docker:**
-   ```bash
-   npm run docker:up
-   ```
+### Manual Setup
 
-5. **Run Prisma migrations:**
-   ```bash
-   cd backend
-   npx prisma generate
-   npx prisma db push
-   cd ..
-   ```
+If you prefer to set up each component individually:
 
-6. **Start the development servers:**
-   ```bash
-   # In one terminal, start backend:
-   npm run dev:backend
+#### 1. Install Dependencies
 
-   # In another terminal, start frontend:
-   npm run dev:frontend
+```bash
+npm install
+```
 
-   # Or run both concurrently:
-   npm run dev
-   ```
+#### 2. Configure Environment Variables
 
-7. **Access the application:**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3001
-   - API Health Check: http://localhost:3001/health
+**Backend** (`backend/.env`):
+```bash
+cp backend/.env.example backend/.env
+```
+
+Edit `backend/.env`:
+```env
+DATABASE_URL="postgresql://rag_user:rag_password@localhost:5432/rag_knowledge_hub?schema=public"
+PORT=3001
+HOST=0.0.0.0
+OPENAI_API_KEY=sk-your-openai-api-key-here
+DEFAULT_TOP_K=5
+CHUNK_SIZE=500
+CHUNK_OVERLAP=50
+```
+
+**Frontend** (`frontend/.env.local`):
+```bash
+cp frontend/.env.example frontend/.env.local
+```
+
+Edit `frontend/.env.local`:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001/api
+```
+
+#### 3. Start PostgreSQL
+
+**Option A: Docker (Recommended)**
+```bash
+npm run docker:up
+```
+
+**Option B: Local PostgreSQL**
+- Install PostgreSQL 16 with pgvector extension
+- Create database `rag_knowledge_hub`
+- Update `DATABASE_URL` in `backend/.env`
+
+#### 4. Initialize Database
+
+```bash
+cd backend
+npx prisma generate
+npx prisma db push
+cd ..
+```
+
+#### 5. Seed Demo Data (Optional)
+
+```bash
+npm run db:seed
+```
+
+This creates:
+- 2 demo tenants: "Acme Corporation" and "TechStart Inc"
+- 3 knowledge bases with sample RAG documentation
+- ~20 embedded document chunks
+
+#### 6. Start Development Servers
+
+```bash
+# Start both backend and frontend
+npm run dev
+
+# Or start individually:
+npm run dev:backend   # Runs on :3001
+npm run dev:frontend  # Runs on :3000
+```
+
+## Usage
+
+### Web Dashboard
+
+1. **Create a Tenant** (http://localhost:3000/tenants)
+   - Click "Create Tenant" and enter a name
+   - Note the generated API key for programmatic access
+
+2. **Create a Knowledge Base** (http://localhost:3000/kb)
+   - Select the tenant
+   - Enter name and description
+
+3. **Ingest Documents** (http://localhost:3000/kb/[id])
+   - Go to "Ingest" tab
+   - Add text directly or paste a URL
+   - Documents are automatically chunked and embedded
+
+4. **Query the Knowledge Base** (http://localhost:3000/kb/[id])
+   - Go to "Query" tab
+   - Enter your question
+   - Adjust top-k results slider
+   - View results with similarity scores
+
+### Example: End-to-End Vertical Slice
+
+After running `npm run db:seed`, try this flow:
+
+1. Visit http://localhost:3000/tenants
+2. Find "Acme Corporation" tenant
+3. Click "View KBs" → Open "RAG Documentation"
+4. Go to "Query" tab
+5. Search: "What is RAG?"
+6. See semantic results from embedded documentation
+
+**Expected Result**: 3-5 relevant chunks about RAG concepts, each with >80% similarity score.
 
 ## API Documentation
 
@@ -141,270 +223,131 @@ QueryLog
 http://localhost:3001/api
 ```
 
-### Tenants
-
-#### List all tenants
-```http
-GET /api/tenants
-```
-
-Response:
-```json
+All responses follow this format:
+```typescript
+// Success
 {
-  "tenants": [
-    {
-      "id": "clx1234...",
-      "name": "ACME Corp",
-      "apiKey": "clx5678...",
-      "createdAt": "2025-01-15T10:00:00Z",
-      "knowledgeBases": [...]
-    }
-  ]
+  "success": true,
+  "data": { ... },
+  "meta": { "timestamp": "2025-01-15T10:00:00Z" }
+}
+
+// Error
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human readable message",
+    "details": { ... }  // Optional
+  },
+  "meta": { "timestamp": "2025-01-15T10:00:00Z" }
 }
 ```
 
-#### Create a tenant
+### Endpoints
+
+#### Tenants
 ```http
-POST /api/tenants
-Content-Type: application/json
-
-{
-  "name": "ACME Corp"
-}
+GET    /api/tenants              # List all tenants
+POST   /api/tenants              # Create tenant
+GET    /api/tenants/:id          # Get tenant by ID
+DELETE /api/tenants/:id          # Delete tenant
 ```
 
-#### Get tenant by ID
+#### Knowledge Bases
 ```http
-GET /api/tenants/:id
+GET    /api/kb?tenantId=xxx      # List KBs (optionally filtered)
+POST   /api/kb                   # Create KB
+GET    /api/kb/:id               # Get KB details
+DELETE /api/kb/:id               # Delete KB
 ```
 
-#### Delete tenant
+#### Ingestion
 ```http
-DELETE /api/tenants/:id
+POST   /api/kb/:id/ingest/text   # Ingest text
+POST   /api/kb/:id/ingest/url    # Ingest from URL
+POST   /api/kb/:id/ingest/file   # File upload (TODO)
 ```
 
-### Knowledge Bases
-
-#### List knowledge bases
+#### Query
 ```http
-GET /api/kb?tenantId=clx1234...
+POST   /api/kb/:id/query         # Semantic search
+GET    /api/kb/:id/queries       # Get query logs
 ```
 
-#### Create knowledge base
-```http
-POST /api/kb
-Content-Type: application/json
+### Example API Usage
 
-{
-  "tenantId": "clx1234...",
-  "name": "Product Documentation",
-  "description": "All product docs and guides"
-}
-```
-
-#### Get knowledge base by ID
-```http
-GET /api/kb/:id
-```
-
-#### Delete knowledge base
-```http
-DELETE /api/kb/:id
-```
-
-### Ingestion
-
-#### Ingest text
-```http
-POST /api/kb/:id/ingest/text
-Content-Type: application/json
-
-{
-  "text": "Your long text content here...",
-  "metadata": {
-    "source": "manual_entry",
-    "author": "John Doe"
-  }
-}
-```
-
-Response:
-```json
-{
-  "document": {
-    "id": "clx9012...",
-    "chunksCreated": 5
-  }
-}
-```
-
-#### Ingest URL
-```http
-POST /api/kb/:id/ingest/url
-Content-Type: application/json
-
-{
-  "url": "https://example.com/article",
-  "metadata": {
-    "category": "blog"
-  }
-}
-```
-
-#### Ingest file (TODO - Not yet implemented)
-```http
-POST /api/kb/:id/ingest/file
-Content-Type: multipart/form-data
-```
-
-**Note:** File upload is currently a stub. To implement:
-1. Add file parsing libraries (pdf-parse, mammoth, etc.)
-2. Process uploaded files using @fastify/multipart
-3. Extract text and follow the same chunking/embedding flow
-
-### Query
-
-#### Query knowledge base
-```http
-POST /api/kb/:id/query
-Content-Type: application/json
-
-{
-  "query": "How do I reset my password?",
-  "topK": 5,
-  "includeMetadata": true
-}
-```
-
-Response:
-```json
-{
-  "query": "How do I reset my password?",
-  "results": [
-    {
-      "id": "clx3456...",
-      "content": "To reset your password, go to settings...",
-      "similarity": 0.89,
-      "documentId": "clx7890...",
-      "metadata": {
-        "chunkIndex": 0,
-        "url": "https://example.com/help"
-      }
-    }
-  ],
-  "resultCount": 5
-}
-```
-
-#### Get query logs
-```http
-GET /api/kb/:id/queries?limit=50
-```
-
-## Integration Guide
-
-### Using RAG Hub as a Backend for Other Apps
-
-The RAG Knowledge Hub is designed to be used as a backend service for AI applications like chatbots, documentation assistants, or tools like `ai-exec-os-core`.
-
-#### Example Integration Flow:
-
-1. **Create a tenant for your app:**
-   ```javascript
-   const response = await fetch('http://localhost:3001/api/tenants', {
-     method: 'POST',
-     headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify({ name: 'My AI App' })
-   });
-   const { tenant } = await response.json();
-   const tenantId = tenant.id;
-   ```
-
-2. **Create a knowledge base:**
-   ```javascript
-   const kbResponse = await fetch('http://localhost:3001/api/kb', {
-     method: 'POST',
-     headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify({
-       tenantId,
-       name: 'User Documentation',
-       description: 'Help docs and FAQs'
-     })
-   });
-   const { knowledgeBase } = await kbResponse.json();
-   const kbId = knowledgeBase.id;
-   ```
-
-3. **Ingest your documents:**
-   ```javascript
-   // Ingest from URL
-   await fetch(`http://localhost:3001/api/kb/${kbId}/ingest/url`, {
-     method: 'POST',
-     headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify({
-       url: 'https://docs.example.com/getting-started'
-     })
-   });
-
-   // Or ingest text directly
-   await fetch(`http://localhost:3001/api/kb/${kbId}/ingest/text`, {
-     method: 'POST',
-     headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify({
-       text: 'Your documentation content...'
-     })
-   });
-   ```
-
-4. **Query in your application:**
-   ```javascript
-   async function getRelevantContext(userQuery) {
-     const response = await fetch(`http://localhost:3001/api/kb/${kbId}/query`, {
-       method: 'POST',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({
-         query: userQuery,
-         topK: 3
-       })
-     });
-
-     const { results } = await response.json();
-
-     // Use results as context for your LLM
-     const context = results.map(r => r.content).join('\n\n');
-     return context;
-   }
-   ```
-
-5. **Use with LLM (e.g., in ai-exec-os-core):**
-   ```javascript
-   const userQuery = "How do I configure the database?";
-   const context = await getRelevantContext(userQuery);
-
-   const llmPrompt = `
-   Use the following context to answer the question:
-
-   ${context}
-
-   Question: ${userQuery}
-   `;
-
-   // Send to your LLM (OpenAI, Anthropic, etc.)
-   const answer = await llm.complete(llmPrompt);
-   ```
-
-### Environment-Specific Configuration
-
-**Production Deployment:**
-- Set `DATABASE_URL` to your production PostgreSQL instance
-- Use environment variables for sensitive data
-- Enable CORS only for your frontend domain
-- Consider implementing API key authentication for tenant access
-- Set up proper logging and monitoring
-
-**Docker Deployment:**
 ```bash
-docker-compose up -d
+# Create a tenant
+curl -X POST http://localhost:3001/api/tenants \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Company"}'
+
+# Create a knowledge base
+curl -X POST http://localhost:3001/api/kb \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "clx123...",
+    "name": "Product Docs",
+    "description": "Internal documentation"
+  }'
+
+# Ingest text
+curl -X POST http://localhost:3001/api/kb/clx456.../ingest/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Your long document content here...",
+    "metadata": {"source": "manual"}
+  }'
+
+# Query
+curl -X POST http://localhost:3001/api/kb/clx456.../query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "How do I reset my password?",
+    "topK": 3,
+    "includeMetadata": true
+  }'
+```
+
+## Integration with External Apps
+
+### Using as a RAG Backend for AI Applications
+
+This knowledge hub is designed to serve as a RAG backend for other applications (e.g., chatbots, AI assistants, `ai-exec-os-core`).
+
+**Integration Pattern:**
+
+```typescript
+// 1. Set up tenant and KB (one-time)
+const tenant = await createTenant({ name: 'My AI App' });
+const kb = await createKB({
+  tenantId: tenant.id,
+  name: 'App Knowledge Base'
+});
+
+// 2. Ingest your documentation
+await ingestDocuments(kb.id, yourDocuments);
+
+// 3. Query for context in your app
+async function getRAGContext(userQuery: string) {
+  const response = await fetch(
+    `http://localhost:3001/api/kb/${kb.id}/query`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: userQuery, topK: 3 })
+    }
+  );
+
+  const { data } = await response.json();
+  return data.results.map(r => r.content).join('\n\n');
+}
+
+// 4. Use context with your LLM
+const context = await getRAGContext("How do I configure X?");
+const prompt = `Context:\n${context}\n\nQuestion: ${userQuery}`;
+const answer = await llm.complete(prompt);
 ```
 
 ## Development
@@ -413,114 +356,255 @@ docker-compose up -d
 
 ```
 rag-multi-tenant-knowledge-hub/
-├── backend/
+├── backend/                    # Fastify API server
 │   ├── src/
-│   │   ├── routes/         # API route handlers
-│   │   ├── services/       # Business logic (embeddings, text splitting)
-│   │   ├── config.ts       # Configuration
-│   │   ├── db.ts           # Prisma client
-│   │   └── index.ts        # Server entry point
+│   │   ├── routes/            # API route handlers
+│   │   ├── services/          # Business logic
+│   │   ├── middleware/        # Error handling, etc.
+│   │   ├── types/             # TypeScript types
+│   │   ├── scripts/           # Utility scripts (seed, etc.)
+│   │   └── test/              # Test setup
 │   ├── prisma/
-│   │   └── schema.prisma   # Database schema
-│   └── package.json
-├── frontend/
+│   │   └── schema.prisma      # Database schema
+│   ├── vitest.config.ts       # Test configuration
+│   └── Dockerfile
+├── frontend/                   # Next.js web app
 │   ├── src/
-│   │   ├── app/           # Next.js app routes
-│   │   │   ├── tenants/   # Tenant management page
-│   │   │   ├── kb/        # Knowledge base pages
-│   │   │   └── layout.tsx # Root layout
-│   │   └── lib/
-│   │       └── api.ts     # API client
-│   └── package.json
-├── docker-compose.yml      # Local PostgreSQL
-└── package.json           # Workspace root
+│   │   ├── app/               # Next.js app router pages
+│   │   └── lib/               # API client, utilities
+│   ├── tailwind.config.ts
+│   └── Dockerfile
+├── docker-compose.yml          # Production compose
+├── docker-compose.dev.yml      # Dev-only DB
+└── package.json               # Workspace root
+```
+
+### Available Scripts
+
+**Root Level:**
+```bash
+npm run dev              # Start backend + frontend concurrently
+npm run build            # Build both backend and frontend
+npm run test             # Run backend tests
+npm run test:watch       # Run tests in watch mode
+npm run lint             # Lint all code
+npm run lint:fix         # Auto-fix linting issues
+npm run format           # Format code with Prettier
+npm run typecheck        # TypeScript type checking
+
+# Database
+npm run db:push          # Push schema to database
+npm run db:seed          # Seed demo data
+npm run db:studio        # Open Prisma Studio
+
+# Docker
+npm run docker:up        # Start all services (postgres + backend + frontend)
+npm run docker:down      # Stop all services
+npm run docker:build     # Build Docker images
+npm run docker:logs      # View logs
+
+# Setup
+npm run setup            # One-command setup (install + db init)
+```
+
+**Backend Workspace:**
+```bash
+cd backend
+npm run dev              # Start dev server with hot reload
+npm run build            # Compile TypeScript
+npm run start            # Run production build
+npm test                 # Run tests
+npm run test:coverage    # Run tests with coverage
+npm run lint             # Lint backend code
+npm run db:seed          # Seed database
+```
+
+**Frontend Workspace:**
+```bash
+cd frontend
+npm run dev              # Start Next.js dev server
+npm run build            # Build for production
+npm start                # Run production build
+npm run lint             # Lint frontend code
 ```
 
 ### Running Tests
 
 ```bash
-# Backend tests (to be implemented)
-cd backend
+# Run all tests
 npm test
 
-# Frontend tests (to be implemented)
-cd frontend
-npm test
+# Run tests in watch mode
+npm run test:watch
+
+# Run with coverage
+cd backend && npm run test:coverage
+
+# Test specific file
+cd backend && npx vitest run src/services/__tests__/text-splitter.test.ts
 ```
 
-### Database Management
+Current test coverage:
+- Text splitter service (10 tests)
+- Embeddings service (6 tests)
+- Error classes (7 tests)
+- Response helpers (8 tests)
 
-**View database in Prisma Studio:**
+### Code Quality
+
 ```bash
-npm run prisma:studio
+# Lint all code
+npm run lint
+
+# Auto-fix linting issues
+npm run lint:fix
+
+# Format code
+npm run format
+
+# Type check
+npm run typecheck
 ```
 
-**Create a new migration:**
+## Docker Deployment
+
+### Development (Database Only)
+
 ```bash
-cd backend
-npx prisma migrate dev --name your_migration_name
+# Start just PostgreSQL for local development
+docker-compose -f docker-compose.dev.yml up -d
+
+# Run backend and frontend locally
+npm run dev
 ```
 
-**Reset database:**
+### Production (Full Stack)
+
 ```bash
+# Create .env file with OPENAI_API_KEY
+echo "OPENAI_API_KEY=sk-your-key" > .env
+
+# Build and start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+Services:
+- **postgres**: PostgreSQL with pgvector (port 5432)
+- **backend**: Fastify API server (port 3001)
+- **frontend**: Next.js web app (port 3000)
+
+## Configuration
+
+### Environment Variables
+
+**Backend** (`backend/.env`):
+- `DATABASE_URL`: PostgreSQL connection string
+- `OPENAI_API_KEY`: OpenAI API key for embeddings
+- `PORT`: Server port (default: 3001)
+- `HOST`: Server host (default: 0.0.0.0)
+- `DEFAULT_TOP_K`: Default number of results (default: 5)
+- `CHUNK_SIZE`: Text chunk size in characters (default: 500)
+- `CHUNK_OVERLAP`: Overlap between chunks (default: 50)
+
+**Frontend** (`frontend/.env.local`):
+- `NEXT_PUBLIC_API_URL`: Backend API base URL
+
+### Chunking Strategy
+
+Documents are split into chunks for better retrieval precision:
+- **Default chunk size**: 500 characters
+- **Overlap**: 50 characters (preserves context across boundaries)
+- **Strategy**: Fixed-size with overlap
+
+Adjust `CHUNK_SIZE` and `CHUNK_OVERLAP` based on your use case:
+- **FAQ/short answers**: 200-300 chars, 25-50 overlap
+- **Documentation**: 500-800 chars, 50-100 overlap
+- **Long-form content**: 1000+ chars, 100-200 overlap
+
+## Troubleshooting
+
+### Database Connection Issues
+
+```bash
+# Check if PostgreSQL is running
+docker ps | grep postgres
+
+# View PostgreSQL logs
+docker logs rag-postgres
+
+# Restart PostgreSQL
+npm run docker:down && npm run docker:up
+```
+
+### Embedding Generation Errors
+
+- **Check OpenAI API key**: Ensure `OPENAI_API_KEY` is set in `backend/.env`
+- **Rate limits**: OpenAI has rate limits. Consider batching or adding delays
+- **Network issues**: Check your internet connection
+
+### Frontend Can't Connect to Backend
+
+- Ensure backend is running on port 3001
+- Check `NEXT_PUBLIC_API_URL` in `frontend/.env.local`
+- Verify CORS settings in `backend/src/index.ts`
+
+### Seed Script Fails
+
+```bash
+# Ensure database is running
+npm run docker:up
+
+# Reset database and try again
 cd backend
 npx prisma migrate reset
+cd ..
+npm run db:seed
 ```
 
-## How It Works
+## Future Extensions
 
-### Text Chunking
-
-Documents are split into chunks of approximately 500 characters (configurable) with 50 characters of overlap to preserve context across chunk boundaries.
-
-### Embeddings
-
-Each chunk is converted to a 1536-dimensional vector using OpenAI's `text-embedding-3-small` model. These embeddings capture the semantic meaning of the text.
-
-### Vector Search
-
-When you query the knowledge base:
-1. Your query is converted to an embedding vector
-2. pgvector performs cosine similarity search to find the most similar chunks
-3. Results are ranked by similarity score
-4. Top-k most relevant chunks are returned
-
-### Multi-Tenancy
-
-Each tenant has isolated knowledge bases. Use the tenant ID when creating knowledge bases to ensure proper data isolation.
-
-## Roadmap
-
-- [ ] File upload support (PDF, DOCX, TXT, etc.)
-- [ ] Authentication middleware with API key validation
-- [ ] Rate limiting
-- [ ] Chunk reranking with cross-encoder models
-- [ ] Support for custom embedding models
-- [ ] Batch ingestion API
-- [ ] Webhook notifications for ingestion completion
-- [ ] Analytics dashboard
-- [ ] Export knowledge base data
+- [ ] **File upload support**: PDF, DOCX, TXT parsing with dedicated libraries
+- [ ] **Batch ingestion API**: Process multiple documents in one request
+- [ ] **Advanced chunking**: Semantic chunking, recursive splitting
+- [ ] **Reranking**: Cross-encoder model for improved relevance
+- [ ] **Custom embeddings**: Support for Sentence Transformers, Cohere, etc.
+- [ ] **Metadata filtering**: Filter search by document type, date, etc.
+- [ ] **Analytics dashboard**: Usage metrics, popular queries, performance stats
+- [ ] **Webhooks**: Notify external systems on ingestion/query events
+- [ ] **API authentication**: API key validation middleware
+- [ ] **Rate limiting**: Per-tenant request throttling
+- [ ] **Export functionality**: Download knowledge base data
+- [ ] **Multi-language support**: i18n for frontend
+- [ ] **Streaming responses**: Real-time query results
 
 ## Contributing
 
-Contributions are welcome! Please follow these steps:
+Contributions are welcome! Please follow these guidelines:
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Write tests for new functionality
+4. Ensure all tests pass (`npm test`)
+5. Lint and format code (`npm run lint:fix && npm run format`)
+6. Commit with clear messages
+7. Push to your fork and submit a PR
 
 ## License
 
 MIT License - See LICENSE file for details
 
-## Support
-
-For issues, questions, or feature requests, please open an issue on GitHub.
-
 ## Acknowledgments
 
-- OpenAI for embeddings API
-- pgvector for PostgreSQL vector support
-- Fastify and Next.js communities
+- [OpenAI](https://openai.com/) for embeddings API
+- [pgvector](https://github.com/pgvector/pgvector) for PostgreSQL vector support
+- [Fastify](https://www.fastify.io/), [Next.js](https://nextjs.org/), and [Prisma](https://www.prisma.io/) communities
+
+---
+
+**Built with ❤️ using TypeScript, Fastify, Next.js, and PostgreSQL**
